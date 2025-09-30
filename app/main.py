@@ -6,9 +6,9 @@ from app.routers import auth, user
 app = FastAPI()
 
 origins = [
-    "http://localhost:5173",   # kalau develop dengan vite
-    "http://exordium.id",      # domain frontend
-    "https://exordium.id",     # versi https
+    "http://localhost:5173",
+    "http://exordium.id",
+    "https://exordium.id",
 ]
 
 app.add_middleware(
