@@ -7,3 +7,5 @@ google-auth
 pyjwt
 passlib[bcrypt]
 python-jose
+requests
+pydantic
