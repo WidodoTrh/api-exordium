@@ -1,51 +1,56 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import RedirectResponse
-import requests
+from pydantic import BaseModel
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
+from sqlalchemy.orm import Session
+from app.api import crud
+from app import schemas
 from app.config import settings
+from app.deps import get_db
+import jwt
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.get("/login")
-def login():
-    google_auth_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
-    scope = "openid email profile"
-    response_type = "code"
+class TokenRequest(BaseModel):
+    id_token: str
 
-    url = (
-        f"{google_auth_endpoint}"
-        f"?client_id={settings.GOOGLE_CLIENT_ID}"
-        f"&redirect_uri={settings.GOOGLE_REDIRECT_URI}"
-        f"&response_type={response_type}"
-        f"&scope={scope}"
-    )
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    token = jwt.encode(to_encode, settings.APP_SECRET_KEY, algorithm="HS256")
+    return token
 
-    return RedirectResponse(url)
+@router.post("/google")
+def google_login(payload: TokenRequest, db: Session = Depends(get_db)):
+    # 1) Verify ID token with google-auth
+    try:
+        idinfo = id_token.verify_oauth2_token(payload.id_token, grequests.Request(), settings.GOOGLE_CLIENT_ID)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
 
-@router.get("/callback")
-def callback(code: str):
-    token_endpoint = "https://oauth2.googleapis.com/token"
+    google_sub = idinfo.get("sub")
+    email = idinfo.get("email")
+    name = idinfo.get("name")
+    picture = idinfo.get("picture")
 
-    # Exchange code jadi access token
-    payload = {
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "client_secret": settings.GOOGLE_CLIENT_SECRET,
-        "code": code,
-        "grant_type": "authorization_code",
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+    # 2) Find or create user
+    user = crud.get_user_by_google_id(db, google_sub)
+    if not user:
+        user = crud.create_user(db, {
+            "google_id": google_sub,
+            "email": email,
+            "name": name,
+            "avatar_url": picture
+        })
+    else:
+        user = crud.update_last_login(db, user)
+
+    # 3) Issue app JWT
+    access_token = create_access_token({"user_id": user.id, "email": user.email})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": schemas.UserOut.from_orm(user)
     }
-
-    token_res = requests.post(token_endpoint, data=payload)
-    token_json = token_res.json()
-
-    if "error" in token_json:
-        raise HTTPException(status_code=400, detail=token_json)
-
-    access_token = token_json["access_token"]
-    id_token = token_json["id_token"]
-
-    userinfo_endpoint = "https://www.googleapis.com/oauth2/v3/userinfo"
-    userinfo_res = requests.get(
-        userinfo_endpoint, headers={"Authorization": f"Bearer {access_token}"}
-    )
-    userinfo = userinfo_res.json()
-    return {"access_token": access_token, "id_token": id_token, "userinfo": userinfo}
