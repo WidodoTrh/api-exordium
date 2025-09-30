@@ -1,4 +1,7 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
-requests
+sqlalchemy
+mysql-connector-python
+google-auth
+pyjwt
