@@ -11,8 +11,11 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: int
+    google_id: str
+    email: str
+    name: str
 
     class Config:
         orm_mode = True

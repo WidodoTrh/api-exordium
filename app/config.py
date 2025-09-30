@@ -19,6 +19,9 @@ class Settings:
     GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
     GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
     APP_SECRET_KEY = os.getenv("APP_SECRET_KEY")
+    ALGORITHM = os.getenv("ALGORITHM")
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+    JWT_EXPIRE_IN_MINUTES = os.getenv("JWT_EXPIRE_IN_MINUTES")
     
     SSL_KEYFILE = os.getenv("SSL_KEYFILE")
     SSL_CERTFILE = os.getenv("SSL_CERTFILE")
