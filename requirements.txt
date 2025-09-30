@@ -5,3 +5,5 @@ sqlalchemy
 mysql-connector-python
 google-auth
 pyjwt
+passlib[bcrypt]
+python-jose
