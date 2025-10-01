@@ -91,7 +91,13 @@ def google_login(token: str, db: Session = Depends(get_db)):
 @router.post("/auth/logout")
 def logout():
     response = Response()
-    response.delete_cookie("access_token")
+    response.delete_cookie(
+        key="access_token",
+        domain="exordium.id",
+        secure=True,
+        httponly=True,
+        samesite="none"
+    )
     return response
 
 @router.get("/me", response_model=UserResponse)
