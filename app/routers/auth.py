@@ -12,6 +12,8 @@ from app.config import settings
 from app.models.user import User
 from app.schemas.user import UserResponse
 
+from app.core.secure import get_current_user_from_cookie
+
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -22,26 +24,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-def get_current_user_from_cookie(request: Request, db: Session = Depends(get_db)):
-    token = request.cookies.get("access_token")
-    # print("Token from cookie:", token)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = int(payload.get("sub")) # hmmmm ini dia permasalahan nya si anjing -________-
-        # print("Decoded payload:", payload)
-    except JWTError as e:
-        print("JWTError:", e)
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
-
-
-@router.post("/auth/google")
+@router.post("/login")
 def google_login(token: str, db: Session = Depends(get_db)):
     try:
         idinfo = id_token.verify_oauth2_token(
@@ -88,7 +71,7 @@ def google_login(token: str, db: Session = Depends(get_db)):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid Google token")
     
-@router.post("/auth/logout")
+@router.post("/logout")
 def logout():
     response = Response()
     response.delete_cookie(
