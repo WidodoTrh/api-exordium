@@ -14,32 +14,16 @@ from app.config import settings
 from app.models.user import User
 from app.schemas.user import UserResponse
 
-from app.core.secure import get_current_user_from_cookie
-from app.helper.auth_helpers import store_refresh_token
 from app.helper.token_service import TokenService
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# def create_access_token(data: dict, expires_delta: timedelta | None = None):
-#     to_encode = data.copy()
-#     expire = datetime.utcnow() + (expires_delta or timedelta(days=7))
-#     to_encode.update({"exp": expire})
-#     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
-#     return encoded_jwt
-
-# def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
-#     to_encode = data.copy()
-#     expire = datetime.utcnow() + (expires_delta or timedelta(days=30))
-#     to_encode.update({"exp": expire, "type": "refresh"})
-#     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
-#     return encoded_jwt
-
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
 
-def create_user(db: Session, email: str, name: str):
-    new_user = User(email=email, name=name)
+def create_user(db: Session, email: str, name: str, pict_uri: str):
+    new_user = User(email=email, name=name, pict_uri=pict_uri)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -89,16 +73,18 @@ async def google_callback(payload: dict, db: Session = Depends(get_db)):
             headers={"Authorization": f"Bearer {access_token}"}
         )
         userinfo = userinfo_res.json()
-
+    print('user ingpo ======== ', userinfo)
+        
     email = userinfo.get("email")
     name = userinfo.get("name")
+    pict_uri = userinfo.get("picture")
     if not email:
         raise HTTPException(status_code=400, detail="Google userinfo failed")
 
     # Cek 
     user = get_user_by_email(db, email)
     if not user:
-        user = create_user(db, email=email, name=name)
+        user = create_user(db, email=email, name=name, pict_uri=pict_uri)
 
     token_service = TokenService(db)
     access_token, refresh_token, access_exp, refresh_exp = token_service.generate_tokens(user.id)
@@ -185,6 +171,7 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
         "id": user.id,
         "email": user.email,
         "name": user.name,
+        "pict_uri": user.pict_uri
     }
     
 @router.post("/logout")
@@ -196,7 +183,7 @@ async def logout(request: Request, db: Session = Depends(get_db)):
         db.query(UserRefreshToken).filter(UserRefreshToken.token == refresh_token).delete()
         db.commit()
 
-    response = JSONResponse({"message": "Logged out successfully"})
+    response = JSONResponse({"message": "Logged Out"})
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
 
