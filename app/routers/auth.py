@@ -16,23 +16,24 @@ from app.schemas.user import UserResponse
 
 from app.core.secure import get_current_user_from_cookie
 from app.helper.auth_helpers import store_refresh_token
+from app.helper.token_service import TokenService
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(days=7))
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
-    return encoded_jwt
+# def create_access_token(data: dict, expires_delta: timedelta | None = None):
+#     to_encode = data.copy()
+#     expire = datetime.utcnow() + (expires_delta or timedelta(days=7))
+#     to_encode.update({"exp": expire})
+#     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
+#     return encoded_jwt
 
-def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(days=30))
-    to_encode.update({"exp": expire, "type": "refresh"})
-    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
-    return encoded_jwt
+# def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
+#     to_encode = data.copy()
+#     expire = datetime.utcnow() + (expires_delta or timedelta(days=30))
+#     to_encode.update({"exp": expire, "type": "refresh"})
+#     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
+#     return encoded_jwt
 
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
@@ -99,50 +100,18 @@ async def google_callback(payload: dict, db: Session = Depends(get_db)):
     if not user:
         user = create_user(db, email=email, name=name)
 
-    # Buat token lokal
-    access_token_expires = timedelta(minutes=1)
-    refresh_token_expires = timedelta(days=30)
+    token_service = TokenService(db)
+    access_token, refresh_token, access_exp, refresh_exp = token_service.generate_tokens(user.id)
 
-    jwt_access_token = create_access_token({"sub": str(user.id)}, expires_delta=access_token_expires)
-    jwt_refresh_token = create_refresh_token({"sub": str(user.id)}, expires_delta=refresh_token_expires)
-
-    store_refresh_token(
-        db=db,
-        user_id=user.id,
-        token=jwt_refresh_token,
-        expires_at=datetime.utcnow() + refresh_token_expires,
-    )
-
-    # --- Set cookies ---
     response = JSONResponse({
         "message": "Login successful",
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "name": user.name,
-        }
+        "user": {"id": user.id, "email": user.email, "name": user.name},
     })
-    response.set_cookie(
-        key="access_token",
-        value=jwt_access_token,
-        httponly=True,
-        secure=True,
-        samesite="None",
-        max_age=int(access_token_expires.total_seconds())
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=jwt_refresh_token,
-        httponly=True,
-        secure=True,
-        samesite="None",
-        max_age=int(refresh_token_expires.total_seconds())
-    )
-    return response
+    return token_service.set_auth_cookies(response, access_token, refresh_token, access_exp, refresh_exp)
     
 @router.post("/refresh")
-async def refresh_access_token(payload: dict, db: Session = Depends(get_db)):
-    refresh_token = payload.get("refresh_token")
+async def refresh_access_token(request: Request, response: Response, db: Session = Depends(get_db)):
+    refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
         raise HTTPException(status_code=400, detail="Missing refresh token")
 
@@ -174,33 +143,20 @@ async def refresh_access_token(payload: dict, db: Session = Depends(get_db)):
         )
         .first()
     )
-
+    
     if not db_token:
         raise HTTPException(status_code=401, detail="Refresh token not found")
-
-    if db_token.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=401, detail="Refresh token expired")
-
-    # Generate token baru
-    access_token_expires = timedelta(hours=1)
-    refresh_token_expires = timedelta(days=30)
-
-    new_access_token = create_access_token({"sub": str(user_id)}, expires_delta=access_token_expires)
-    new_refresh_token = create_refresh_token({"sub": str(user_id)}, expires_delta=refresh_token_expires)
     
-    store_refresh_token(
-        db=db,
-        user_id=user_id,
-        token=new_refresh_token,
-        expires_at=datetime.utcnow() + refresh_token_expires,
-    )
+    token_service = TokenService(db)
+    access_token, new_refresh_token, access_exp, refresh_exp = token_service.generate_tokens(user_id)
 
-    return {
-        "access_token": new_access_token,
+    response = JSONResponse({
+        "access_token": access_token,
         "refresh_token": new_refresh_token,
         "token_type": "Bearer",
-        "expires_in": int(access_token_expires.total_seconds()),
-    }
+        "expires_in": int(access_exp.total_seconds()),
+    })
+    return token_service.set_auth_cookies(response, access_token, new_refresh_token, access_exp, refresh_exp)
     
 @router.get("/m")
 async def get_me(request: Request, db: Session = Depends(get_db)):
