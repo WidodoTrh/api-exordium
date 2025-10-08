@@ -1,4 +1,5 @@
 # app/core/security.py
+from datetime import datetime, timedelta
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
@@ -23,3 +24,17 @@ def get_current_user_from_cookie(request: Request, db: Session = Depends(get_db)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(days=7))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(days=30))
+    to_encode.update({"exp": expire, "type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
