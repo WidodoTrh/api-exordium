@@ -12,6 +12,9 @@ class TokenService:
     def generate_tokens(self, user_id: int):
         access_token_expires = timedelta(minutes=1)
         refresh_token_expires = timedelta(days=30)
+        
+        self.db.query(UserRefreshToken).filter(UserRefreshToken.user_id == user_id).delete()
+        self.db.commit()
 
         access_token = create_access_token({"sub": str(user_id)}, expires_delta=access_token_expires)
         refresh_token = create_refresh_token({"sub": str(user_id)}, expires_delta=refresh_token_expires)
@@ -20,6 +23,7 @@ class TokenService:
             user_id=user_id,
             token=refresh_token,
             expires_at=datetime.utcnow() + refresh_token_expires,
+            created_at=datetime.utcnow().replace(microsecond=0)
         )
         self.db.add(db_token)
         self.db.commit()
