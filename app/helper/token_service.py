@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from fastapi.responses import JSONResponse
 from jose import jwt
 import uuid
+import secrets
 from app.config import settings
 from app.models.refresh_token import UserRefreshToken
 from app.core.secure import create_access_token, create_refresh_token
@@ -51,4 +52,16 @@ class TokenService:
             samesite="None",
             max_age=int(refresh_exp.total_seconds()),
         )
+        
+        csrf_token = secrets.token_urlsafe(32)
+        response.set_cookie(
+            key="XSRF-TOKEN",
+            value=csrf_token,
+            httponly=False,
+            secure=True,
+            samesite="None",
+            domain=settings.APP_ROOT_DOMAIN,
+            max_age=int(access_exp.total_seconds()),
+        )
+        
         return response
