@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from app.models.database import init_db
 from fastapi.middleware.cors import CORSMiddleware
+from app.middlewares.csrf_middleware import CSRFMiddleware
 from app.routers import auth, user, data
 
 app = FastAPI()
-
 origins = [
     "http://localhost:5173",
     "http://exordium.id",
@@ -18,6 +18,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(CSRFMiddleware)
 
 
 @app.on_event("startup")
