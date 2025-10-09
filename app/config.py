@@ -33,5 +33,7 @@ class Settings:
     
     SSL_KEYFILE = os.getenv("SSL_KEYFILE")
     SSL_CERTFILE = os.getenv("SSL_CERTFILE")
+    
+    APP_ROOT_DOMAIN = os.getenv("APP_ROOT_DOMAIN")
 
 settings = Settings()
