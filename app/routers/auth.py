@@ -47,55 +47,67 @@ def login_with_google():
 
 @router.post("/google/callback")
 async def google_callback(payload: dict, db: Session = Depends(get_db)):
-    code = payload.get("code")
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing code")
+    try:
+        code = payload.get("code")
+        if not code:
+            raise HTTPException(status_code=400, detail="Missing code")
 
-    # --- Tukar code ke Google ---
-    data = {
-        "code": code,
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "client_secret": settings.GOOGLE_CLIENT_SECRET,
-        "redirect_uri": settings.APP_REDIRECT_URI,
-        "grant_type": "authorization_code",
-    }
+        data = {
+            "code": code,
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": settings.APP_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
 
-    async with httpx.AsyncClient() as client:
-        token_res = await client.post(settings.GOOGLE_TOKEN_ENDPOINT, data=data)
-        token_json = token_res.json()
+        async with httpx.AsyncClient() as client:
+            token_res = await client.post(settings.GOOGLE_TOKEN_ENDPOINT, data=data)
+            token_json = token_res.json()
 
-    if "error" in token_json:
-        raise HTTPException(status_code=400, detail=token_json["error"])
+        print("TOKEN JSON:", token_json)
 
-    # Ambil data user dari google
-    access_token = token_json["access_token"]
-    async with httpx.AsyncClient() as client:
-        userinfo_res = await client.get(
-            settings.GOOGLE_OAUTH_USERINFO,
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        userinfo = userinfo_res.json()
-    print('user ingpo ======== ', userinfo)
+        if "error" in token_json:
+            raise HTTPException(status_code=400, detail=token_json["error"])
+
+        # Ambil data user dari google
+        access_token = token_json["access_token"]
+        async with httpx.AsyncClient() as client:
+            userinfo_res = await client.get(
+                settings.GOOGLE_OAUTH_USERINFO,
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            userinfo = userinfo_res.json()
+
+        print("USERINFO:", userinfo)
         
-    email = userinfo.get("email")
-    name = userinfo.get("name")
-    pict_uri = userinfo.get("picture")
-    if not email:
-        raise HTTPException(status_code=400, detail="Google userinfo failed")
+        email = userinfo.get("email")
+        name = userinfo.get("name")
+        pict_uri = userinfo.get("picture")
 
-    # Cek 
-    user = get_user_by_email(db, email)
-    if not user:
-        user = create_user(db, email=email, name=name, pict_uri=pict_uri)
+        if not email:
+            raise HTTPException(status_code=400, detail="Google userinfo failed")
 
-    token_service = TokenService(db)
-    access_token, refresh_token, access_exp, refresh_exp = token_service.generate_tokens(user.id)
+        # Cek / create user
+        user = get_user_by_email(db, email)
+        if not user:
+            user = create_user(db, email=email, name=name, pict_uri=pict_uri)
 
-    response = JSONResponse({
-        "message": "Login successful",
-        "user": {"id": user.id, "email": user.email, "name": user.name},
-    })
-    return token_service.set_auth_cookies(response, access_token, refresh_token, access_exp, refresh_exp)
+        token_service = TokenService(db)
+        access_token, refresh_token, access_exp, refresh_exp = token_service.generate_tokens(user.id)
+
+        response = JSONResponse({
+            "message": "Login successful",
+            "user": {"id": user.id, "email": user.email, "name": user.name},
+        })
+
+        return token_service.set_auth_cookies(response, access_token, refresh_token, access_exp, refresh_exp)
+
+    except Exception as e:
+        import traceback
+        print("CALLBACK ERROR:", str(e))
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
     
 @router.post("/refresh")
 async def refresh_access_token(request: Request, response: Response, db: Session = Depends(get_db)):
