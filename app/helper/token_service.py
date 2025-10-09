@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from fastapi.responses import JSONResponse
 from jose import jwt
+import uuid
 from app.config import settings
 from app.models.refresh_token import UserRefreshToken
 from app.core.secure import create_access_token, create_refresh_token
@@ -10,18 +11,21 @@ class TokenService:
         self.db = db
 
     def generate_tokens(self, user_id: int):
-        access_token_expires = timedelta(minutes=1)
+        session_id = str(uuid.uuid4())
+        
+        access_token_expires = timedelta(days=1)
         refresh_token_expires = timedelta(days=30)
         
         self.db.query(UserRefreshToken).filter(UserRefreshToken.user_id == user_id).delete()
         self.db.commit()
 
-        access_token = create_access_token({"sub": str(user_id)}, expires_delta=access_token_expires)
-        refresh_token = create_refresh_token({"sub": str(user_id)}, expires_delta=refresh_token_expires)
+        access_token, access_jti = create_access_token({"sub": str(user_id), "session_id": session_id}, expires_delta=access_token_expires)
+        refresh_token = create_refresh_token({"sub": str(user_id), "session_id": session_id}, expires_delta=refresh_token_expires)
 
         db_token = UserRefreshToken(
             user_id=user_id,
             token=refresh_token,
+            session_id=session_id,
             expires_at=datetime.utcnow() + refresh_token_expires,
             created_at=datetime.utcnow().replace(microsecond=0)
         )

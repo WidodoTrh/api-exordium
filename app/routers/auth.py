@@ -6,6 +6,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 from datetime import datetime, timedelta
 from jose import JWTError, jwt, ExpiredSignatureError
+from app.models.refresh_token import UserRefreshToken
 import urllib.parse
 import httpx
 
@@ -13,6 +14,7 @@ from app.models.database import get_db
 from app.config import settings
 from app.models.user import User
 from app.schemas.user import UserResponse
+from app.core.secure import get_current_user_from_cookie
 
 from app.helper.token_service import TokenService
 
@@ -120,7 +122,6 @@ async def refresh_access_token(request: Request, response: Response, db: Session
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-    from app.models.refresh_token import UserRefreshToken
     db_token = (
         db.query(UserRefreshToken)
         .filter(
@@ -145,33 +146,13 @@ async def refresh_access_token(request: Request, response: Response, db: Session
     return token_service.set_auth_cookies(response, access_token, new_refresh_token, access_exp, refresh_exp)
     
 @router.get("/m")
-async def get_me(request: Request, db: Session = Depends(get_db)):
-    token = request.cookies.get("access_token")
-
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token missing"
-        )
-
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+async def get_me(curr_usr: User = Depends(get_current_user_from_cookie)):
+    
     return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "pict_uri": user.pict_uri
+        "id": curr_usr.id,
+        "email": curr_usr.email,
+        "name": curr_usr.name,
+        "pict_uri": curr_usr.pict_uri
     }
     
 @router.post("/logout")
