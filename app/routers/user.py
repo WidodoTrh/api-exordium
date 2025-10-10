@@ -35,23 +35,23 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     return user
 
 # Update user
-@router.put("/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, update: UserUpdate, db: Session = Depends(get_db)):
-    user = db.query(user_model.User).filter(user_model.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    for key, value in update.dict(exclude_unset=True).items():
-        setattr(user, key, value)
-    db.commit()
-    db.refresh(user)
-    return user
+# @router.put("/{user_id}", response_model=UserResponse)
+# def update_user(user_id: int, update: UserUpdate, db: Session = Depends(get_db)):
+#     user = db.query(user_model.User).filter(user_model.User.id == user_id).first()
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
+#     for key, value in update.dict(exclude_unset=True).items():
+#         setattr(user, key, value)
+#     db.commit()
+#     db.refresh(user)
+#     return user
 
 # Delete user
-@router.delete("/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(user_model.User).filter(user_model.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    db.delete(user)
-    db.commit()
-    return {"detail": "User deleted"}
+# @router.delete("/{user_id}")
+# def delete_user(user_id: int, db: Session = Depends(get_db)):
+#     user = db.query(user_model.User).filter(user_model.User.id == user_id).first()
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
+#     db.delete(user)
+#     db.commit()
+#     return {"detail": "User deleted"}
