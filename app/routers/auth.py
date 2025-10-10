@@ -7,12 +7,15 @@ from google.auth.transport import requests
 from datetime import datetime, timedelta
 from jose import JWTError, jwt, ExpiredSignatureError
 from app.models.refresh_token import UserRefreshToken
+from passlib.context import CryptContext
 import urllib.parse
+from pydantic import BaseModel
 import httpx
 
 from app.models.database import get_db
 from app.config import settings
 from app.models.user import User
+from app.models.user_privacy import UserPrivacy
 from app.schemas.user import UserResponse
 from app.core.secure import get_current_user_from_cookie
 
@@ -20,6 +23,10 @@ from app.helper.token_service import TokenService
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class setPasswordRequest(BaseModel):
+    p: str
 
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
@@ -158,14 +165,16 @@ async def refresh_access_token(request: Request, response: Response, db: Session
     return token_service.set_auth_cookies(response, access_token, new_refresh_token, access_exp, refresh_exp)
     
 @router.get("/m")
-async def get_me(curr_usr: User = Depends(get_current_user_from_cookie)):
-    
-    return {
-        "id": curr_usr.id,
-        "email": curr_usr.email,
-        "name": curr_usr.name,
-        "pict_uri": curr_usr.pict_uri
-    }
+async def get_me(curr_usr: User = Depends(get_current_user_from_cookie)):    
+    return JSONResponse(
+        status_code=200,
+        content={
+            "id": curr_usr.id,
+            "email": curr_usr.email,
+            "name": curr_usr.name,
+            "pict_uri": curr_usr.pict_uri
+        }
+    )
     
 @router.post("/logout")
 async def logout(request: Request, db: Session = Depends(get_db)):
@@ -181,3 +190,21 @@ async def logout(request: Request, db: Session = Depends(get_db)):
     response.delete_cookie("refresh_token")
 
     return response
+
+@router.post("/set-pass")
+async def set_password(body: setPasswordRequest,db: Session = Depends(get_db),curr_usr: User = Depends(get_current_user_from_cookie)):
+    password = body.p
+    if not password or len(password) < 8:
+        JSONResponse(content={"message" : "Password must be at least 8 characters"}, status_code=422)
+        # raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+
+    hashed = pwd_context.hash(password)
+    privacy = db.query(UserPrivacy).filter(UserPrivacy.user_id == curr_usr.id).first()
+    if privacy:
+        privacy.user_password = hashed
+    else:
+        privacy = UserPrivacy(user_id=curr_usr.id, user_password=hashed)
+        db.add(privacy)
+
+    db.commit()
+    return JSONResponse(content={"message": "Password has been set successfully"})
