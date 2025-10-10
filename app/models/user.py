@@ -14,3 +14,4 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     refresh_tokens = relationship("UserRefreshToken", back_populates="user", cascade="all, delete-orphan")
+    privacy = relationship("UserPrivacy", back_populates="user", uselist=False)
