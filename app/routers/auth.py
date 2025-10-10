@@ -67,9 +67,14 @@ async def google_callback(payload: dict, db: Session = Depends(get_db)):
             "grant_type": "authorization_code",
         }
 
-        async with httpx.AsyncClient() as client:
-            token_res = await client.post(settings.GOOGLE_TOKEN_ENDPOINT, data=data)
-            token_json = token_res.json()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+                token_res = await client.post(settings.GOOGLE_TOKEN_ENDPOINT, data=data)
+                token_json = token_res.json()
+        except httpx.ConnectTimeout:
+            JSONResponse(content={"message" : "Connection to google time out"}, status_code=500)
+        except httpx.HTTPStatusError as e:
+            JSONResponse(content={"message" : str(e)}, status_code=e.response.status_code)
 
         print("TOKEN JSON:", token_json)
 
