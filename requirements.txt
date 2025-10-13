@@ -11,3 +11,4 @@ python-jose
 requests
 pydantic
 httpx
+pycryptodome
